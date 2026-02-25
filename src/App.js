@@ -9,6 +9,7 @@ import {
 import Papa from "papaparse";
 import "leaflet/dist/leaflet.css";
 import "./styles.css";
+import noaLogo from "./NOA_circle.png";
 
 // --- HELPER: REGION CALCULATOR ---
 const getRegion = (code, lat, lng) => {
@@ -515,7 +516,37 @@ export default function App() {
     <div className="app-container">
       <div className="sidebar">
         <div className="sidebar-header">
-          <h2>🇬🇧 Code Master</h2>
+          <h2>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "12px",
+                margin: "10px 0",
+              }}
+            >
+              <a
+                href="https://www.youtube.com/@NoOneAsked_YT"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <img
+                  src={noaLogo}
+                  alt="No One Asked Logo"
+                  style={{
+                    width: "50px",
+                    height: "50px",
+                    borderRadius: "50%",
+                    cursor: "pointer",
+                  }}
+                />
+              </a>
+              <h1 style={{ fontSize: "24px", margin: "0" }}>
+                UK Area Code Quiz
+              </h1>
+            </div>
+          </h2>
           <div className="nav-switcher">
             <button
               className={appSection === "GAME" ? "active" : ""}
@@ -569,7 +600,7 @@ export default function App() {
                   shiny: false,
                 };
 
-                if (score >= 646)
+                if (score >= 645)
                   rank = {
                     title: "👑 UK Legend",
                     color: "linear-gradient(90deg, #FFD700, #FFA500, #FFD700)",
