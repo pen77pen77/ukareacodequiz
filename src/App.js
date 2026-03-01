@@ -668,12 +668,12 @@ export default function App() {
           <div className="game-panel">
             <div className="progress-container">
               {(() => {
-                const score = 50;
+                const score = correctList.length;
 
                 // Base Rank (0 - 24)
                 let rank = {
                   title: "☎️ Local Caller",
-                  color: "#7f8c8d", // Slate Grey
+                  color: "linear-gradient(90deg, #a8e6cf, #38ada9)", // Fresh Mint!
                   shiny: false,
                 };
 
@@ -699,13 +699,13 @@ export default function App() {
                 else if (score >= 350)
                   rank = {
                     title: "🗼 Routing Specialist",
-                    color: "linear-gradient(90deg, #E67E22, #D35400)", // Vibrant Orange
+                    color: "linear-gradient(90deg, #FF9900, #FF5500)", // Vibrant Orange
                     shiny: true,
                   };
                 else if (score >= 250)
                   rank = {
                     title: "🎛️ Exchange Manager",
-                    color: "linear-gradient(90deg, #E74C3C, #C0392B)", // Crimson Red
+                    color: "linear-gradient(90deg, #FF3333, #CC0000)", // Crimson Red
                     shiny: false,
                   };
                 else if (score >= 150)
