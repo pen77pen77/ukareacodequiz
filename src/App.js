@@ -186,7 +186,7 @@ export default function App() {
   // --- APP NAVIGATION ---
   const [appSection, setAppSection] = useState("GAME");
   const [regionFilter, setRegionFilter] = useState("All"); // NEW: Region State
-
+  const [showInfo, setShowInfo] = useState(false); // NEW: Info Rules toggle
   // --- GAME STATE ---
   const [mode, setMode] = useState(
     () => localStorage.getItem("uk_codes_mode") || "nameToCode"
@@ -535,8 +535,8 @@ export default function App() {
                   src={noaLogo}
                   alt="No One Asked Logo"
                   style={{
-                    width: "50px",
-                    height: "50px",
+                    width: "40px",
+                    height: "40px",
                     borderRadius: "50%",
                     cursor: "pointer",
                   }}
@@ -545,8 +545,83 @@ export default function App() {
               <h1 style={{ fontSize: "24px", margin: "0" }}>
                 UK Area Code Quiz
               </h1>
+
+              {/* 1. NEW INFO BUTTON GOES HERE */}
+              <button
+                onClick={() => setShowInfo(!showInfo)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                  padding: "0",
+                }}
+                title="How to Play"
+              >
+                ℹ️
+              </button>
             </div>
           </h2>
+
+          {/* 2. NEW DROPDOWN RULES BOX GOES HERE */}
+          {showInfo && (
+            <div
+              style={{
+                backgroundColor: "#f8f9fa",
+                padding: "14px",
+                borderRadius: "8px",
+                fontSize: "13px",
+                textAlign: "left",
+                marginBottom: "15px",
+                border: "1px solid #ddd",
+                color: "#333",
+              }}
+            >
+              <strong
+                style={{
+                  display: "block",
+                  marginBottom: "10px",
+                  fontSize: "15px",
+                }}
+              >
+                📖 How to Play
+              </strong>
+              <ul
+                style={{
+                  paddingLeft: "0",
+                  margin: "0",
+                  listStyleType: "none",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}
+              >
+                <li>
+                  <strong>🎯 The Goal:</strong> Identify all 645 UK geographic
+                  area codes to become <strong>💎 The Ofcom Oracle</strong>.
+                </li>
+                <li>
+                  <strong>🔢 Flexible Numbers:</strong> Codes can be entered
+                  with or without the leading zero (e.g., <code>0116</code> or{" "}
+                  <code>116</code>).
+                </li>
+                <li>
+                  <strong>✏️ Typo Forgiveness:</strong> In 'Code ➡️ Place' mode,
+                  close spelling guesses are accepted — no need for perfection.
+                </li>
+                <li>
+                  <strong>🗺️ Interactive Map:</strong> Click any dot on the map
+                  at any time to jump directly to that location.
+                </li>
+                <li>
+                  <strong>🤔 Stuck?:</strong> Use <strong>Skip</strong> to move
+                  to a random location, or <strong>Give Up</strong> to reveal
+                  the answer.
+                </li>
+              </ul>
+            </div>
+          )}
+
           <div className="nav-switcher">
             <button
               className={appSection === "GAME" ? "active" : ""}
@@ -593,47 +668,62 @@ export default function App() {
           <div className="game-panel">
             <div className="progress-container">
               {(() => {
-                const score = correctList.length;
+                const score = 50;
+
+                // Base Rank (0 - 24)
                 let rank = {
-                  title: "🌱 Novice",
-                  color: "#2ecc71",
+                  title: "☎️ Local Caller",
+                  color: "#7f8c8d", // Slate Grey
                   shiny: false,
                 };
 
+                // The Tiers
                 if (score >= 645)
                   rank = {
-                    title: "👑 UK Legend",
-                    color: "linear-gradient(90deg, #FFD700, #FFA500, #FFD700)",
+                    title: "💎 The Ofcom Oracle",
+                    color: "linear-gradient(90deg, #00f2fe, #4facfe, #00f2fe)", // Iridescent Diamond
                     shiny: true,
                   };
-                else if (score >= 500)
+                else if (score >= 550)
                   rank = {
-                    title: "💎 Grandmaster",
-                    color: "linear-gradient(90deg, #fd79a8, #e84393)",
+                    title: "👑 Area Code Legend",
+                    color: "linear-gradient(90deg, #F1C40F, #F39C12)", // Bright Gold
                     shiny: true,
                   };
-                else if (score >= 400)
+                else if (score >= 450)
                   rank = {
-                    title: "🔥 Master",
-                    color: "linear-gradient(90deg, #9b59b6, #8e44ad)",
+                    title: "🛰️ Network Architect",
+                    color: "linear-gradient(90deg, #fd79a8, #e84393)", // Vibrant Pink
                     shiny: true,
                   };
-                else if (score >= 300)
+                else if (score >= 350)
                   rank = {
-                    title: "🌟 Expert",
-                    color: "linear-gradient(90deg, #e74c3c, #c0392b)",
+                    title: "🗼 Routing Specialist",
+                    color: "linear-gradient(90deg, #E67E22, #D35400)", // Vibrant Orange
+                    shiny: true,
+                  };
+                else if (score >= 250)
+                  rank = {
+                    title: "🎛️ Exchange Manager",
+                    color: "linear-gradient(90deg, #E74C3C, #C0392B)", // Crimson Red
                     shiny: false,
                   };
-                else if (score >= 200)
+                else if (score >= 150)
                   rank = {
-                    title: "🗺️ Navigator",
-                    color: "linear-gradient(90deg, #3498db, #2980b9)",
+                    title: "📡 Telecom Technician",
+                    color: "linear-gradient(90deg, #9B59B6, #8E44AD)", // Deep Purple
                     shiny: false,
                   };
-                else if (score >= 100)
+                else if (score >= 75)
                   rank = {
-                    title: "🚶 Explorer",
-                    color: "linear-gradient(90deg, #1abc9c, #16a085)",
+                    title: "📠 Regional Operator",
+                    color: "linear-gradient(90deg, #3498DB, #2980B9)", // Cyan / Blue
+                    shiny: false,
+                  };
+                else if (score >= 25)
+                  rank = {
+                    title: "🎧 Switchboard Trainee",
+                    color: "linear-gradient(90deg, #2ECC71, #27AE60)", // Forest Green
                     shiny: false,
                   };
 
@@ -648,7 +738,12 @@ export default function App() {
                         {score} / {areaCodes.length}
                       </span>
                     </div>
-                    <div className="progress-bar-bg">
+
+                    {/* UPGRADED PROGRESS BAR WITH MILESTONES */}
+                    <div
+                      className="progress-bar-bg"
+                      style={{ position: "relative" }}
+                    >
                       <div
                         className={`progress-bar-fill ${
                           rank.shiny ? "shiny" : ""
@@ -658,6 +753,22 @@ export default function App() {
                           background: rank.color,
                         }}
                       ></div>
+
+                      {/* THE MILESTONES */}
+                      {[25, 75, 150, 250, 350, 450, 550].map((milestone) => (
+                        <div
+                          key={milestone}
+                          style={{
+                            position: "absolute",
+                            left: `${(milestone / areaCodes.length) * 100}%`,
+                            top: 0,
+                            bottom: 0,
+                            width: "2px",
+                            backgroundColor: "rgba(0, 0, 0, 0.2)",
+                            zIndex: 2,
+                          }}
+                        />
+                      ))}
                     </div>
                   </>
                 );
@@ -701,10 +812,13 @@ export default function App() {
                   </div>
                   <input
                     type="text"
+                    inputMode={mode === "nameToCode" ? "numeric" : "text"}
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
                     autoFocus
-                    placeholder="Type here..."
+                    placeholder={
+                      mode === "nameToCode" ? "e.g. 01234" : "e.g. London"
+                    }
                     ref={inputRef}
                   />
                   <button type="submit" className="check-btn">
