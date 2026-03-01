@@ -764,7 +764,7 @@ export default function App() {
                             top: 0,
                             bottom: 0,
                             width: "2px",
-                            backgroundColor: "rgba(0, 0, 0, 0.2)",
+                            backgroundColor: "rgba(0, 0, 0, 0.1)",
                             zIndex: 2,
                           }}
                         />
