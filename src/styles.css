@@ -49,14 +49,22 @@ html,
 
 .nav-switcher button {
   flex: 1;
-  padding: 10px;
-  border: none;
+  padding: 8px 4px; /* Slightly tighter padding so it fits well */
   background: transparent;
+  border: none;
   cursor: pointer;
   font-weight: bold;
+  font-size: 12px; /* Slightly smaller text for mobile */
   border-radius: 6px;
   color: #555;
   transition: all 0.2s;
+
+  /* NEW: This stacks the emoji on top of the text */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
 .nav-switcher button.active {

@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useCallback,
+} from "react";
 import {
   MapContainer,
   TileLayer,
@@ -187,6 +193,139 @@ export default function App() {
   const [appSection, setAppSection] = useState("GAME");
   const [regionFilter, setRegionFilter] = useState("All"); // NEW: Region State
   const [showInfo, setShowInfo] = useState(false); // NEW: Info Rules toggle
+  // --- SPRINT QUIZ STATE ---
+  const [quizFilterStatus, setQuizFilterStatus] = useState("All"); // All, grey, blue, green
+  const [quizFilterRegion, setQuizFilterRegion] = useState("All");
+  const [quizActive, setQuizActive] = useState(false); // Is the 10-q game running?
+  const [quizQuestions, setQuizQuestions] = useState([]);
+  const [quizCurrentIndex, setQuizCurrentIndex] = useState(0);
+  const [quizScore, setQuizScore] = useState(0);
+  const [quizFinished, setQuizFinished] = useState(false);
+  const [quizHistory, setQuizHistory] = useState([]);
+
+  // --- SPRINT LOGIC ---
+  const startSprint = () => {
+    let pool = areaCodes.filter((item) => {
+      // Forgiving Region Check (catches "Northern Ireland", "NI", etc.)
+      const regionName = item.region ? item.region.toLowerCase() : "";
+      const matchesRegion =
+        quizFilterRegion === "All" ||
+        regionName.includes(quizFilterRegion.toLowerCase()) ||
+        (quizFilterRegion === "Northern Ireland" &&
+          (regionName === "ni" || regionName.includes("ireland")));
+
+      let isGreen = correctList.includes(item.code);
+      let isBlue = reviewList.includes(item.code);
+      let status = "Grey";
+      if (isGreen) status = "Green";
+      else if (isBlue) status = "Blue";
+
+      const matchesStatus =
+        quizFilterStatus === "All" || status === quizFilterStatus;
+
+      return matchesRegion && matchesStatus;
+    });
+
+    if (pool.length === 0) {
+      alert(
+        "Oops! No codes match these exact filters. Try changing the Region or Status."
+      );
+      return;
+    }
+
+    const shuffled = [...pool].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, 10);
+
+    setQuizQuestions(selected);
+    setQuizCurrentIndex(0);
+    setQuizScore(0);
+    setQuizHistory([]); // Clears history for the new round
+    setQuizFinished(false);
+    setShouldZoom(true); // Fly to the first Sprint question!
+    setQuizActive(true);
+  };
+
+  // --- SPRINT ANSWER CHECKER ---
+  const handleSprintSubmit = () => {
+    // 1. Double-Click Preventer
+    if (!quizActive || quizQuestions.length === 0 || sprintLock.current) return;
+
+    sprintLock.current = true;
+    setTimeout(() => {
+      sprintLock.current = false;
+    }, 250);
+
+    const currentQ = quizQuestions[quizCurrentIndex];
+    let isCorrect = false;
+
+    // 2. Exact Typo Tolerance & Multi-Answer Logic from Classic Mode
+    let inputClean = userInput.replace(/\s+/g, "").toLowerCase();
+
+    if (mode === "nameToCode") {
+      if (!inputClean.startsWith("0")) inputClean = "0" + inputClean;
+
+      let validCodes = currentQ.code.split(/[,/]/);
+      for (let vCode of validCodes) {
+        if (!vCode) continue;
+        let answerClean = vCode.replace(/\s+/g, "");
+        if (inputClean === answerClean) {
+          isCorrect = true;
+          break;
+        }
+      }
+    } else {
+      let userClean = inputClean.replace(/[^a-zA-Z]/g, "");
+      // Safety fallback to place if rawPlace isn't available
+      let validTowns = (currentQ.rawPlace || currentQ.place).split(/[,/\[\]]/);
+
+      for (let town of validTowns) {
+        if (!town) continue;
+        let townWithoutParentheses = town.replace(/\(.*?\)/g, "");
+        let answerClean = townWithoutParentheses
+          .replace(/[^a-zA-Z]/g, "")
+          .toLowerCase();
+        if (answerClean.length === 0) continue;
+
+        if (userClean === answerClean) {
+          isCorrect = true;
+          break;
+        } else {
+          // Check for typos using your custom function!
+          let typoCount = getTypos(userClean, answerClean);
+          let allowedTypos = answerClean.length > 6 ? 2 : 1;
+          if (typoCount <= allowedTypos) {
+            isCorrect = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // 3. Score and History Tracker
+    if (isCorrect) setQuizScore((prev) => prev + 1);
+
+    setQuizHistory((prev) => [
+      ...prev,
+      { question: currentQ, answerGiven: userInput || "Skipped", isCorrect },
+    ]);
+
+    // 4. Move forward to next question
+    if (quizCurrentIndex + 1 < quizQuestions.length) {
+      setQuizCurrentIndex((prev) => prev + 1);
+      setUserInput("");
+      setShouldZoom(true); // Fly to the next question!
+
+      // NEW: Force the cursor back into the box instantly!
+      setTimeout(() => {
+        if (inputRef.current) inputRef.current.focus();
+      }, 10);
+    } else {
+      setQuizFinished(true);
+      setQuizActive(false);
+      setUserInput("");
+    }
+  };
+
   // --- GAME STATE ---
   const [mode, setMode] = useState(
     () => localStorage.getItem("uk_codes_mode") || "nameToCode"
@@ -204,6 +343,7 @@ export default function App() {
 
   // --- REFS ---
   const inputRef = useRef(null);
+  const sprintLock = useRef(false);
   const markerRefs = useRef({});
   const dictItemRefs = useRef({});
 
@@ -301,45 +441,56 @@ export default function App() {
   }, []);
 
   // --- GAME LOGIC ---
-  const generateQuestion = (specificPlace = null) => {
-    setFeedback("");
-    setUserInput("");
+  const generateQuestion = useCallback(
+    (specificPlace = null) => {
+      setFeedback("");
+      setUserInput("");
 
-    setTimeout(() => {
-      if (inputRef.current) inputRef.current.focus();
-    }, 50);
+      setTimeout(() => {
+        if (inputRef.current) inputRef.current.focus();
+      }, 50);
 
-    if (specificPlace) {
-      setCurrentQuestion(specificPlace);
-      setShouldZoom(false);
-      return;
-    }
+      if (specificPlace) {
+        setCurrentQuestion(specificPlace);
+        setShouldZoom(false);
+        return;
+      }
 
-    // Filter by BOTH un-mastered AND current region
-    const pending = areaCodes.filter((item) => {
-      const notMastered = !correctList.includes(item.code);
-      const matchesRegion =
-        regionFilter === "All" || item.region === regionFilter;
-      return notMastered && matchesRegion;
-    });
+      // Filter by BOTH un-mastered AND current region
+      const pending = areaCodes.filter((item) => {
+        const notMastered = !correctList.includes(item.code);
+        const matchesRegion =
+          regionFilter === "All" || item.region === regionFilter;
+        return notMastered && matchesRegion;
+      });
 
-    if (pending.length === 0) {
-      setFeedback(`🎉 You have mastered EVERY code in ${regionFilter}!`);
-      setCurrentQuestion(null);
-      return;
-    }
+      if (pending.length === 0) {
+        setFeedback(`🎉 You have mastered EVERY code in ${regionFilter}!`);
+        setCurrentQuestion(null);
+        return;
+      }
 
-    const nextQ = pending[Math.floor(Math.random() * pending.length)];
-    setCurrentQuestion(nextQ);
-    setShouldZoom(true);
-  };
+      const nextQ = pending[Math.floor(Math.random() * pending.length)];
+      setCurrentQuestion(nextQ);
+
+      // NEW: Triggers the zoom, then safely resets it 500ms later
+      setShouldZoom(true);
+      setTimeout(() => setShouldZoom(false), 500);
+    },
+    [areaCodes, correctList, regionFilter]
+  ); // <-- React now safely tracks these!
 
   // Generate new question if Data loads OR Region Filter changes
   useEffect(() => {
-    if (appSection === "GAME" && !loading && areaCodes.length > 0) {
+    if (
+      appSection === "GAME" &&
+      !loading &&
+      areaCodes.length > 0 &&
+      !currentQuestion
+    ) {
       generateQuestion();
     }
-  }, [loading, areaCodes, appSection, regionFilter]);
+  }, [loading, areaCodes, appSection, generateQuestion, currentQuestion]);
 
   const addToReviewList = (code) => {
     if (!reviewList.includes(code)) setReviewList([...reviewList, code]);
@@ -627,40 +778,51 @@ export default function App() {
               className={appSection === "GAME" ? "active" : ""}
               onClick={() => setAppSection("GAME")}
             >
-              🎮 Play
+              <span style={{ fontSize: "18px" }}>🎮</span>
+              <span>Classic</span>
+            </button>
+            <button
+              className={appSection === "QUIZ" ? "active" : ""}
+              onClick={() => setAppSection("QUIZ")}
+            >
+              <span style={{ fontSize: "18px" }}>⚡</span>
+              <span>Sprint</span>
             </button>
             <button
               className={appSection === "DICTIONARY" ? "active" : ""}
               onClick={() => setAppSection("DICTIONARY")}
             >
-              📖 Dictionary
+              <span style={{ fontSize: "18px" }}>📖</span>
+              <span>Dictionary</span>
             </button>
           </div>
 
-          {/* NEW REGION DROPDOWN */}
-          <div style={{ marginBottom: "15px" }}>
-            <select
-              value={regionFilter}
-              onChange={(e) => setRegionFilter(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: "6px",
-                border: "2px solid #ddd",
-                fontSize: "14px",
-                fontWeight: "bold",
-                color: "#333",
-                cursor: "pointer",
-              }}
-            >
-              <option value="All">🇬🇧 All Regions (UK)</option>
-              <option value="England">🦁 England</option>
-              <option value="Scotland">🦄 Scotland</option>
-              <option value="Wales">🐉 Wales</option>
-              <option value="NI">☘️ Northern Ireland</option>
-              <option value="Crown">🏝️ Crown Dependencies</option>
-            </select>
-          </div>
+          {/* CLASSIC REGION DROPDOWN (Hidden in Sprint Mode) */}
+          {appSection !== "QUIZ" && (
+            <div style={{ marginBottom: "15px" }}>
+              <select
+                value={regionFilter}
+                onChange={(e) => setRegionFilter(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "10px",
+                  borderRadius: "6px",
+                  border: "2px solid #ddd",
+                  fontSize: "14px",
+                  fontWeight: "bold",
+                  color: "#333",
+                  cursor: "pointer",
+                }}
+              >
+                <option value="All">🇬🇧 All Regions (UK)</option>
+                <option value="England">🦁 England</option>
+                <option value="Scotland">🦄 Scotland</option>
+                <option value="Wales">🐉 Wales</option>
+                <option value="NI">☘️ Northern Ireland</option>
+                <option value="Crown">🏝️ Crown Dependencies</option>
+              </select>
+            </div>
+          )}
         </div>
 
         {/* ================= GAME MODE UI ================= */}
@@ -945,9 +1107,28 @@ export default function App() {
                   href="https://www.youtube.com/@NoOneAsked_YT"
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ color: "#999", textDecoration: "underline" }}
+                  style={{
+                    color: "#3498db",
+                    textDecoration: "none",
+                    fontWeight: "bold",
+                  }}
                 >
                   No One Asked
+                </a>
+                <br />
+                {/* NEW FEEDBACK LINK */}
+                <a
+                  href="https://forms.gle/hqxUy7kuPqWViwmt6"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: "#999",
+                    textDecoration: "underline",
+                    display: "inline-block",
+                    margin: "4px 0",
+                  }}
+                >
+                  Report a Bug / Leave Feedback
                 </a>
                 <br />
                 Data adapted from{" "}
@@ -962,6 +1143,437 @@ export default function App() {
                 (corrected)
               </div>
             </div>
+          </div>
+        )}
+        {/* =========================================
+          SPRINT SETUP SCREEN
+          ========================================= */}
+        {appSection === "QUIZ" && !quizActive && !quizFinished && (
+          <div
+            className="game-panel"
+            style={{
+              padding: "20px",
+              background: "white",
+              borderRadius: "8px",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+            }}
+          >
+            <h2 style={{ marginTop: 0, textAlign: "center", color: "#2c3e50" }}>
+              ⚡ Quick 10 Sprint
+            </h2>
+            <p
+              style={{
+                textAlign: "center",
+                color: "#666",
+                marginBottom: "20px",
+                fontSize: "14px",
+              }}
+            >
+              Choose your focus areas for a quick practice round.
+            </p>
+
+            {/* SPRINT MODE TOGGLE */}
+            <div style={{ marginBottom: "15px", textAlign: "left" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: "bold",
+                  marginBottom: "6px",
+                  color: "#333",
+                  fontSize: "14px",
+                }}
+              >
+                📝 Quiz Mode:
+              </label>
+              <div className="mode-toggle" style={{ marginBottom: 0 }}>
+                <button
+                  className={mode === "nameToCode" ? "active-mode" : ""}
+                  onClick={() => setMode("nameToCode")}
+                >
+                  Place ➡️ Code
+                </button>
+                <button
+                  className={mode === "codeToName" ? "active-mode" : ""}
+                  onClick={() => setMode("codeToName")}
+                >
+                  Code ➡️ Place
+                </button>
+              </div>
+            </div>
+
+            {/* STATUS DROPDOWN */}
+            <div style={{ marginBottom: "15px", textAlign: "left" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: "bold",
+                  marginBottom: "6px",
+                  color: "#333",
+                  fontSize: "14px",
+                }}
+              >
+                🎯 Target Status:
+              </label>
+              <select
+                value={quizFilterStatus}
+                onChange={(e) => setQuizFilterStatus(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "6px",
+                  border: "2px solid #ddd",
+                  fontSize: "15px",
+                  backgroundColor: "#f9f9f9",
+                }}
+              >
+                <option value="All">All Codes</option>
+                <option value="Grey">⚪ Unlearned (Grey)</option>
+                <option value="Blue">🔵 Learning (Blue)</option>
+                <option value="Green">🟢 Mastered (Green)</option>
+              </select>
+            </div>
+
+            {/* REGION DROPDOWN */}
+            <div style={{ marginBottom: "25px", textAlign: "left" }}>
+              <label
+                style={{
+                  display: "block",
+                  fontWeight: "bold",
+                  marginBottom: "6px",
+                  color: "#333",
+                  fontSize: "14px",
+                }}
+              >
+                🗺️ Target Region:
+              </label>
+              <select
+                value={quizFilterRegion}
+                onChange={(e) => setQuizFilterRegion(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "12px",
+                  borderRadius: "6px",
+                  border: "2px solid #ddd",
+                  fontSize: "15px",
+                  backgroundColor: "#f9f9f9",
+                }}
+              >
+                <option value="All">All Regions</option>
+                <option value="England">England</option>
+                <option value="Scotland">Scotland</option>
+                <option value="Wales">Wales</option>
+                <option value="Northern Ireland">Northern Ireland</option>
+              </select>
+            </div>
+
+            <button
+              onClick={startSprint}
+              className="check-btn"
+              style={{
+                width: "100%",
+                fontSize: "18px",
+                padding: "15px",
+                marginTop: "10px",
+              }}
+            >
+              🚀 Start Sprint
+            </button>
+          </div>
+        )}
+
+        {/* =========================================
+          SPRINT GAMEPLAY SCREEN
+          ========================================= */}
+        {appSection === "QUIZ" && quizActive && !quizFinished && (
+          <div
+            className="game-panel"
+            style={{
+              padding: "20px",
+              background: "white",
+              borderRadius: "8px",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "20px",
+              }}
+            >
+              <button
+                onClick={() => {
+                  setQuizActive(false);
+                  setQuizFinished(false);
+                }}
+                style={{
+                  padding: "6px 12px",
+                  background: "#e74c3c",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  fontWeight: "bold",
+                }}
+              >
+                🚪 Quit
+              </button>
+              <div style={{ fontWeight: "bold", color: "#7f8c8d" }}>
+                Q: {quizCurrentIndex + 1}/{quizQuestions.length} |{" "}
+                <span style={{ color: "#f39c12" }}>Score: {quizScore}</span>
+              </div>
+            </div>
+
+            <div
+              className="quiz-box"
+              style={{ textAlign: "center", padding: "30px 20px" }}
+            >
+              <div
+                style={{
+                  fontSize: "14px",
+                  color: "#888",
+                  marginBottom: "10px",
+                  textTransform: "uppercase",
+                  letterSpacing: "1px",
+                }}
+              >
+                {mode === "nameToCode"
+                  ? "What is the area code for:"
+                  : "What place is area code:"}
+              </div>
+              <div
+                className="question-text"
+                style={{
+                  fontSize: "32px",
+                  color: "#2c3e50",
+                  marginBottom: "30px",
+                }}
+              >
+                {mode === "nameToCode"
+                  ? quizQuestions[quizCurrentIndex]?.place
+                  : quizQuestions[quizCurrentIndex]?.code}
+              </div>
+
+              <input
+                type="text"
+                ref={inputRef}
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSprintSubmit()}
+                placeholder="Type your answer..."
+                autoFocus
+                style={{
+                  width: "100%",
+                  textAlign: "center",
+                  fontSize: "18px",
+                  padding: "15px",
+                  marginBottom: "15px",
+                  border: "2px solid #ddd",
+                  borderRadius: "8px",
+                }}
+              />
+
+              <button
+                onClick={handleSprintSubmit}
+                style={{
+                  width: "100%",
+                  padding: "15px",
+                  fontSize: "18px",
+                  fontWeight: "bold",
+                  backgroundColor: "#f1c40f",
+                  color: "#333",
+                  border: "none",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  marginBottom: "15px",
+                }}
+              >
+                Submit Answer
+              </button>
+
+              {/* Subtle Skip Hint */}
+              <div
+                style={{ fontSize: "12px", color: "#888", textAlign: "center" }}
+              >
+                <em>
+                  Tip: Press Enter or click Submit with an empty box to skip
+                  (counts as a mistake).
+                </em>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================
+          SPRINT RESULTS SCREEN
+          ========================================= */}
+        {appSection === "QUIZ" && quizFinished && (
+          <div
+            className="game-panel"
+            style={{
+              padding: "20px",
+              textAlign: "center",
+              background: "white",
+              borderRadius: "8px",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "28px",
+                color: "#2c3e50",
+                marginBottom: "10px",
+                marginTop: 0,
+              }}
+            >
+              🏁 Sprint Complete!
+            </h2>
+
+            <div
+              style={{
+                fontSize: "54px",
+                fontWeight: "900",
+                color: quizScore >= 7 ? "#2ecc71" : "#e74c3c",
+                margin: "10px 0",
+              }}
+            >
+              {quizScore}{" "}
+              <span style={{ fontSize: "24px", color: "#bdc3c7" }}>
+                / {quizQuestions.length}
+              </span>
+            </div>
+
+            <p
+              style={{
+                fontSize: "16px",
+                color: "#666",
+                marginBottom: "20px",
+                fontWeight: "bold",
+                fontStyle: "italic",
+              }}
+            >
+              {(() => {
+                if (quizScore === 10) {
+                  const msgs = [
+                    "Flawless victory! 🏆",
+                    "BT would like to offer you a job. 📞",
+                    "Somewhere, a telecom engineer just nodded. 🛠️",
+                    "Perfection. No One Asked, but you delivered anyway. 😎",
+                    "The Ofcom Oracle bows to your knowledge. 💎",
+                  ];
+                  return msgs[Math.floor(Math.random() * msgs.length)];
+                }
+                if (quizScore >= 7) {
+                  const msgs = [
+                    "That was dangerously competent. 😎",
+                    "Sharp work. Just slight line interference. 📻",
+                    "Solid connections! 📞",
+                    "Great job! Only a couple of dropped calls. 📶",
+                  ];
+                  return msgs[Math.floor(Math.random() * msgs.length)];
+                }
+                if (quizScore >= 4) {
+                  const msgs = [
+                    "Respectable. Over 600 codes is a lot to keep in one head. 🧠",
+                    "Not bad, but you definitely misrouted a few calls. 📞",
+                    "A few crossed wires, but nothing a cup of tea won't fix. 🫖",
+                    "Not bad, but room to grow! 📈",
+                  ];
+                  return msgs[Math.floor(Math.random() * msgs.length)];
+                }
+
+                const badMsgs = [
+                  "Keep practicing! 💪",
+                  "Oof. Did you dial the wrong country? ☎️",
+                  "That line was… disconnected. 📴",
+                  "Time to hit the Dictionary tab! 📖",
+                ];
+                return badMsgs[Math.floor(Math.random() * badMsgs.length)];
+              })()}
+            </p>
+
+            {/* HISTORY REVIEW LIST */}
+            <div
+              style={{
+                textAlign: "left",
+                marginBottom: "25px",
+                borderTop: "2px dashed #eee",
+                paddingTop: "15px",
+              }}
+            >
+              <h4 style={{ margin: "0 0 10px 0", color: "#2c3e50" }}>
+                📋 Your Answers:
+              </h4>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+              >
+                {quizHistory.map((item, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: "10px",
+                      borderRadius: "6px",
+                      backgroundColor: item.isCorrect ? "#e8f8f5" : "#fdf2e9",
+                      borderLeft: `4px solid ${
+                        item.isCorrect ? "#2ecc71" : "#e74c3c"
+                      }`,
+                      fontSize: "14px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: "bold",
+                        color: "#333",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Q{idx + 1}:{" "}
+                      {mode === "nameToCode"
+                        ? item.question.place
+                        : item.question.code}
+                    </div>
+                    <div>
+                      <span
+                        style={{
+                          color: item.isCorrect ? "#27ae60" : "#555",
+                          textDecoration: item.isCorrect
+                            ? "none"
+                            : "line-through",
+                        }}
+                      >
+                        You wrote: {item.answerGiven}
+                      </span>
+                      {!item.isCorrect && (
+                        <span
+                          style={{
+                            color: "#c0392b",
+                            fontWeight: "bold",
+                            marginLeft: "8px",
+                          }}
+                        >
+                          Ans:{" "}
+                          {mode === "nameToCode"
+                            ? item.question.code
+                            : item.question.place}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              className="check-btn"
+              onClick={() => {
+                setQuizFinished(false);
+                setQuizActive(false);
+              }}
+              style={{ width: "100%", padding: "15px", fontSize: "18px" }}
+            >
+              🔄 Play Again
+            </button>
           </div>
         )}
 
@@ -1045,7 +1657,9 @@ export default function App() {
           </div>
         )}
       </div>
-
+      {/* =========================================
+          THE MAP
+          ========================================= */}
       <div className="map-area">
         <MapContainer
           center={[54.0, -2.5]}
@@ -1061,9 +1675,13 @@ export default function App() {
             }
           />
 
-          {/* Engine for flying the camera */}
+          {/* Engine for flying the camera (Now supports Sprint!) */}
           <MapFocus
-            location={currentQuestion}
+            location={
+              appSection === "QUIZ" && quizActive
+                ? quizQuestions[quizCurrentIndex]
+                : currentQuestion
+            }
             animate={shouldZoom}
             appSection={appSection}
           />
@@ -1072,16 +1690,28 @@ export default function App() {
           <ZoomTracker onZoom={setMapZoom} />
 
           {areaCodes.map((location) => {
-            // HIDE DOTS THAT DO NOT MATCH THE REGION FILTER
-            if (regionFilter !== "All" && location.region !== regionFilter)
+            // HIDE DOTS THAT DO NOT MATCH THE CLASSIC REGION FILTER
+            // (We ignore this during a Sprint so the whole map is visible!)
+            if (
+              appSection !== "QUIZ" &&
+              regionFilter !== "All" &&
+              location.region !== regionFilter
+            )
               return null;
 
             const isGameMastered = correctList.includes(location.code);
             const isReview = reviewList.includes(location.code);
+
+            // NEW: Highlight the red dot in BOTH Classic and Sprint modes!
             const isGameCurrent =
-              appSection === "GAME" &&
-              currentQuestion &&
-              currentQuestion.code === location.code;
+              (appSection === "GAME" &&
+                currentQuestion &&
+                currentQuestion.code === location.code) ||
+              (appSection === "QUIZ" &&
+                quizActive &&
+                quizQuestions[quizCurrentIndex] &&
+                quizQuestions[quizCurrentIndex].code === location.code);
+
             const dictState = dictStatus[location.code] || 0;
             const isHighlighted = highlightCode === location.code;
 
@@ -1089,12 +1719,11 @@ export default function App() {
             let fillColor = "#888";
             let opacity = 0.5;
 
-            // Dynamic dot size based on zoom!
             let baseRadius = mapZoom >= 9 ? 9 : mapZoom >= 7 ? 6 : 4;
             let radius = baseRadius;
             let weight = mapZoom >= 9 ? 2 : 1;
 
-            if (appSection === "GAME") {
+            if (appSection === "GAME" || appSection === "QUIZ") {
               if (isGameMastered) {
                 color = "#2ecc71";
                 fillColor = "#2ecc71";
@@ -1106,7 +1735,7 @@ export default function App() {
                 color = "#e74c3c";
                 fillColor = "#e74c3c";
                 opacity = 1;
-                radius = baseRadius + 4; // Current target is bigger
+                radius = baseRadius + 4;
                 weight = 3;
               }
               if (!showAllDots && isGameMastered) return null;
@@ -1125,7 +1754,7 @@ export default function App() {
                 color = "#f1c40f";
                 fillColor = "#f1c40f";
                 opacity = 1;
-                radius = baseRadius + 5; // Highlighted target is bigger
+                radius = baseRadius + 5;
                 weight = 4;
               }
             }
@@ -1139,9 +1768,12 @@ export default function App() {
                 ref={(el) => (markerRefs.current[location.code] = el)}
                 eventHandlers={{
                   click: () => {
+                    // Disable clicking dots during a Sprint to prevent cheating/breaking flow
+                    if (appSection === "QUIZ") return;
+
                     if (appSection === "GAME") {
                       generateQuestion(location);
-                    } else {
+                    } else if (appSection === "DICTIONARY") {
                       setSearchTerm("");
                       setCurrentQuestion(location);
                       setTimeout(() => {
@@ -1165,7 +1797,6 @@ export default function App() {
                   },
                 }}
               >
-                {/* FIX: autoPan={false} prevents the map from violently jumping */}
                 <Popup autoPan={false}>
                   {appSection === "DICTIONARY" || isGameMastered ? (
                     <>
