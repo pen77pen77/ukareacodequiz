@@ -1398,7 +1398,7 @@ export default function App() {
               >
                 <em>
                   Tip: Press Enter or click Submit with an empty box to skip
-                  (counts as a mistake).
+                  (counts as incorrect).
                 </em>
               </div>
             </div>
