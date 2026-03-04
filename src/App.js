@@ -490,8 +490,7 @@ export default function App() {
     ) {
       generateQuestion();
     }
-  }, [loading, areaCodes, appSection, generateQuestion, currentQuestion]);
-
+  }, [loading, areaCodes, appSection, generateQuestion]);
   const addToReviewList = (code) => {
     if (!reviewList.includes(code)) setReviewList([...reviewList, code]);
   };
@@ -645,7 +644,7 @@ export default function App() {
     // animation is buttery smooth, but it feels instant to the user.
     setTimeout(() => {
       const marker = markerRefs.current[location.code];
-      if (marker) marker.openPopup();
+      if (marker && marker._map) marker.openPopup();
     }, 50);
   };
 
