@@ -193,6 +193,7 @@ export default function App() {
   const [appSection, setAppSection] = useState("GAME");
   const [regionFilter, setRegionFilter] = useState("All"); // NEW: Region State
   const [showInfo, setShowInfo] = useState(false); // NEW: Info Rules toggle
+  const [showStats, setShowStats] = useState(false);
   // --- SPRINT QUIZ STATE ---
   const [quizFilterStatus, setQuizFilterStatus] = useState("All"); // All, grey, blue, green
   const [quizFilterRegion, setQuizFilterRegion] = useState("All");
@@ -368,20 +369,13 @@ export default function App() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [mistakeCount, setMistakeCount] = useState(() => {
-    const saved = localStorage.getItem("uk_codes_mistakes");
-    return saved ? parseInt(saved, 10) : 0;
-  });
-
   useEffect(() => {
     localStorage.setItem("uk_codes_mastered", JSON.stringify(correctList));
   }, [correctList]);
   useEffect(() => {
     localStorage.setItem("uk_codes_review", JSON.stringify(reviewList));
   }, [reviewList]);
-  useEffect(() => {
-    localStorage.setItem("uk_codes_mistakes", mistakeCount.toString());
-  }, [mistakeCount]);
+
   useEffect(() => {
     localStorage.setItem("uk_codes_dict_status", JSON.stringify(dictStatus));
   }, [dictStatus]);
@@ -394,6 +388,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("uk_codes_show_dots", JSON.stringify(showAllDots));
   }, [showAllDots]);
+  // Daily snapshot for timeline graph
+  useEffect(() => {
+    if (correctList.length === 0) return;
+    const today = new Date().toISOString().split("T")[0];
+    const saved = JSON.parse(localStorage.getItem("uk_codes_timeline") || "{}");
+    saved[today] = correctList.length;
+    localStorage.setItem("uk_codes_timeline", JSON.stringify(saved));
+  }, [correctList]);
 
   // Load CSV
   useEffect(() => {
@@ -415,7 +417,6 @@ export default function App() {
             return {
               code: rawPhoneCode, // Show the exact string: "028 90, 028 95..."
 
-              // Keep the Place logic exactly as it was!
               place: row["Area"].replace(/\s*\[.*?\]/g, ""),
               rawPlace: row["Area"],
               latitude: lat,
@@ -587,8 +588,7 @@ export default function App() {
     ) {
       setCorrectList([]);
       setReviewList([]);
-      setMistakeCount(0);
-      localStorage.removeItem("uk_codes_mastered");
+
       localStorage.removeItem("uk_codes_review");
       localStorage.removeItem("uk_codes_mistakes");
       generateQuestion();
@@ -599,7 +599,7 @@ export default function App() {
     const data = {
       m: correctList,
       r: reviewList,
-      mi: mistakeCount,
+
       d: dictStatus,
     };
     const code = btoa(JSON.stringify(data));
@@ -617,7 +617,7 @@ export default function App() {
       if (data.m) {
         localStorage.setItem("uk_codes_mastered", JSON.stringify(data.m));
         localStorage.setItem("uk_codes_review", JSON.stringify(data.r));
-        localStorage.setItem("uk_codes_mistakes", data.mi);
+
         localStorage.setItem("uk_codes_dict_status", JSON.stringify(data.d));
         alert("✅ Import Successful! Reloading...");
         window.location.reload();
@@ -661,18 +661,276 @@ export default function App() {
   }, [areaCodes, searchTerm, regionFilter]);
 
   if (loading) return <div style={{ padding: 20 }}>Loading Data...</div>;
+  // --- STATS MODAL ---
+  const StatsModal = () => {
+    const regionConfig = [
+      { key: "England", label: "England", emoji: "🦁" },
+      { key: "Scotland", label: "Scotland", emoji: "🦄" },
+      { key: "Wales", label: "Wales", emoji: "🐉" },
+      { key: "NI", label: "Northern Ireland", emoji: "☘️" },
+      { key: "Crown", label: "Crown Dependencies", emoji: "🏝️" },
+    ];
 
+    const timeline = JSON.parse(
+      localStorage.getItem("uk_codes_timeline") || "{}"
+    );
+    const timelineEntries = Object.entries(timeline)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-14); // Last 14 days
+
+    const maxVal = Math.max(...timelineEntries.map(([, v]) => v), 1);
+
+    return (
+      <div
+        onClick={() => setShowStats(false)}
+        style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(0,0,0,0.5)",
+          zIndex: 9999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          backdropFilter: "blur(2px)",
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            background: "white",
+            borderRadius: "16px",
+            padding: "28px",
+            width: "340px",
+            maxHeight: "85vh",
+            overflowY: "auto",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+          }}
+        >
+          {/* HEADER */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "24px",
+            }}
+          >
+            <h2 style={{ margin: 0, fontSize: "20px", color: "#2c3e50" }}>
+              📊 Your Progress
+            </h2>
+            <button
+              onClick={() => setShowStats(false)}
+              style={{
+                background: "none",
+                border: "none",
+                fontSize: "20px",
+                cursor: "pointer",
+                color: "#aaa",
+              }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* SECTION 1: REGION RINGS */}
+          <h3
+            style={{
+              margin: "0 0 16px 0",
+              fontSize: "14px",
+              color: "#888",
+              textTransform: "uppercase",
+              letterSpacing: "1px",
+            }}
+          >
+            Region Mastery
+          </h3>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+              marginBottom: "28px",
+            }}
+          >
+            {regionConfig.map(({ key, label, emoji }) => {
+              const total = areaCodes.filter((c) => c.region === key).length;
+              const mastered = correctList.filter((code) => {
+                const item = areaCodes.find((c) => c.code === code);
+                return item && item.region === key;
+              }).length;
+              const pct = total > 0 ? Math.round((mastered / total) * 100) : 0;
+              const isComplete = pct === 100;
+
+              return (
+                <div key={key}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      marginBottom: "5px",
+                      fontSize: "13px",
+                    }}
+                  >
+                    <span style={{ fontWeight: "600", color: "#2c3e50" }}>
+                      {emoji} {label}
+                    </span>
+                    <span
+                      style={{
+                        color: isComplete ? "#2ecc71" : "#888",
+                        fontWeight: isComplete ? "bold" : "normal",
+                      }}
+                    >
+                      {mastered}/{total} {isComplete ? "✓" : `${pct}%`}
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      height: "8px",
+                      backgroundColor: "#f0f0f0",
+                      borderRadius: "4px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        borderRadius: "4px",
+                        width: `${pct}%`,
+                        background: isComplete
+                          ? "linear-gradient(90deg, #2ecc71, #27ae60)"
+                          : "linear-gradient(90deg, #3498db, #2980b9)",
+                        transition: "width 0.8s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* SECTION 2: TIMELINE */}
+          <h3
+            style={{
+              margin: "0 0 16px 0",
+              fontSize: "14px",
+              color: "#888",
+              textTransform: "uppercase",
+              letterSpacing: "1px",
+            }}
+          >
+            Codes Unlocked (Last 14 Days)
+          </h3>
+          {timelineEntries.length < 2 ? (
+            <div
+              style={{
+                textAlign: "center",
+                color: "#bbb",
+                fontSize: "13px",
+                padding: "20px 0",
+                marginBottom: "8px",
+              }}
+            >
+              Keep playing — your journey graph will appear here! 📈
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "flex-end",
+                gap: "4px",
+                height: "80px",
+                marginBottom: "8px",
+              }}
+            >
+              {timelineEntries.map(([date, val]) => {
+                const barHeight = Math.max((val / maxVal) * 100, 4);
+                const shortDate = date.slice(5); // "MM-DD"
+                return (
+                  <div
+                    key={date}
+                    style={{
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <div
+                      title={`${date}: ${val} codes`}
+                      style={{
+                        width: "100%",
+                        height: `${barHeight}%`,
+                        background: "linear-gradient(180deg, #4facfe, #3498db)",
+                        borderRadius: "3px 3px 0 0",
+                        transition: "height 0.5s ease",
+                        cursor: "default",
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: "9px",
+                        color: "#bbb",
+                        writingMode: "vertical-rl",
+                        transform: "rotate(180deg)",
+                        height: "24px",
+                      }}
+                    >
+                      {shortDate}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* TOTAL SUMMARY */}
+          <div
+            style={{
+              marginTop: "20px",
+              padding: "14px",
+              backgroundColor: "#f8f9fa",
+              borderRadius: "10px",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{ fontSize: "32px", fontWeight: "900", color: "#2c3e50" }}
+            >
+              {correctList.length}
+              <span
+                style={{
+                  fontSize: "16px",
+                  color: "#aaa",
+                  fontWeight: "normal",
+                }}
+              >
+                {" "}
+                / {areaCodes.length}
+              </span>
+            </div>
+            <div style={{ fontSize: "12px", color: "#888", marginTop: "4px" }}>
+              total codes mastered —{" "}
+              {Math.round((correctList.length / areaCodes.length) * 100)}%
+              complete
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
   return (
     <div className="app-container">
+      {showStats && <StatsModal />}
       <div className="sidebar">
         <div className="sidebar-header">
-          <h2>
+          <h2 style={{ margin: "0" }}>
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: "12px",
+                gap: "10px", // Tightened the gap slightly
                 margin: "10px 0",
               }}
             >
@@ -685,31 +943,50 @@ export default function App() {
                   src={noaLogo}
                   alt="No One Asked Logo"
                   style={{
-                    width: "40px",
-                    height: "40px",
+                    width: "38px", // Shrunk logo slightly from 40px to 36px
+                    height: "38px",
                     borderRadius: "50%",
                     cursor: "pointer",
                   }}
                 />
               </a>
-              <h1 style={{ fontSize: "24px", margin: "0" }}>
+
+              {/* Added nowrap and smaller font to protect the layout */}
+              <h1
+                style={{ fontSize: "22px", margin: "0", whiteSpace: "nowrap" }}
+              >
                 UK Area Code Quiz
               </h1>
 
-              {/* 1. NEW INFO BUTTON GOES HERE */}
-              <button
-                onClick={() => setShowInfo(!showInfo)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  fontSize: "14px",
-                  cursor: "pointer",
-                  padding: "0",
-                }}
-                title="How to Play"
-              >
-                ℹ️
-              </button>
+              {/* Grouped the buttons together in their own mini-container */}
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  onClick={() => setShowInfo(!showInfo)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    fontSize: "16px",
+                    cursor: "pointer",
+                    padding: "0",
+                  }}
+                  title="How to Play"
+                >
+                  ℹ️
+                </button>
+                <button
+                  onClick={() => setShowStats(true)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    fontSize: "16px",
+                    cursor: "pointer",
+                    padding: "0",
+                  }}
+                  title="Your Stats"
+                >
+                  📊
+                </button>
+              </div>
             </div>
           </h2>
 
@@ -725,8 +1002,27 @@ export default function App() {
                 marginBottom: "15px",
                 border: "1px solid #ddd",
                 color: "#333",
+                position: "relative",
               }}
             >
+              <button
+                onClick={() => setShowInfo(false)}
+                style={{
+                  position: "absolute",
+                  top: "8px",
+                  right: "8px",
+                  background: "none",
+                  border: "none",
+                  fontSize: "16px",
+                  cursor: "pointer",
+                  color: "#999",
+                  lineHeight: 1,
+                  padding: "2px 4px",
+                }}
+                title="Close"
+              >
+                ✕
+              </button>
               <strong
                 style={{
                   display: "block",
@@ -779,7 +1075,7 @@ export default function App() {
                     <li>
                       <strong>⚠️ Skip vs Give Up:</strong> Skip moves to a
                       random unmastered code for free. Give Up reveals the
-                      answer but counts as a mistake.
+                      answer.
                     </li>
                   </>
                 )}
@@ -904,62 +1200,75 @@ export default function App() {
               {(() => {
                 const score = correctList.length;
 
-                // Base Rank (0 - 24)
+                // 1. Current Rank
                 let rank = {
                   title: "☎️ Local Caller",
-                  color: "linear-gradient(90deg, #a8e6cf, #38ada9)", // Fresh Mint!
+                  color: "linear-gradient(90deg, #a8e6cf, #38ada9)",
                   shiny: false,
                 };
-
-                // The Tiers
                 if (score >= 645)
                   rank = {
                     title: "💎 The Ofcom Oracle",
-                    color: "linear-gradient(90deg, #00f2fe, #4facfe, #00f2fe)", // Iridescent Diamond
+                    color: "linear-gradient(90deg, #00f2fe, #4facfe, #00f2fe)",
                     shiny: true,
                   };
                 else if (score >= 550)
                   rank = {
                     title: "👑 Area Code Legend",
-                    color: "linear-gradient(90deg, #F1C40F, #F39C12)", // Bright Gold
+                    color: "linear-gradient(90deg, #F1C40F, #F39C12)",
                     shiny: true,
                   };
                 else if (score >= 450)
                   rank = {
                     title: "🛰️ Network Architect",
-                    color: "linear-gradient(90deg, #fd79a8, #e84393)", // Vibrant Pink
+                    color: "linear-gradient(90deg, #fd79a8, #e84393)",
                     shiny: true,
                   };
                 else if (score >= 350)
                   rank = {
                     title: "🗼 Routing Specialist",
-                    color: "linear-gradient(90deg, #FF9900, #FF5500)", // Vibrant Orange
+                    color: "linear-gradient(90deg, #FF9900, #FF5500)",
                     shiny: true,
                   };
                 else if (score >= 250)
                   rank = {
                     title: "🎛️ Exchange Manager",
-                    color: "linear-gradient(90deg, #FF3333, #CC0000)", // Crimson Red
+                    color: "linear-gradient(90deg, #FF3333, #CC0000)",
                     shiny: false,
                   };
                 else if (score >= 150)
                   rank = {
                     title: "📡 Telecom Technician",
-                    color: "linear-gradient(90deg, #9B59B6, #8E44AD)", // Deep Purple
+                    color: "linear-gradient(90deg, #9B59B6, #8E44AD)",
                     shiny: false,
                   };
                 else if (score >= 75)
                   rank = {
                     title: "📠 Regional Operator",
-                    color: "linear-gradient(90deg, #3498DB, #2980B9)", // Cyan / Blue
+                    color: "linear-gradient(90deg, #3498DB, #2980B9)",
                     shiny: false,
                   };
                 else if (score >= 25)
                   rank = {
                     title: "🎧 Switchboard Trainee",
-                    color: "linear-gradient(90deg, #2ECC71, #27AE60)", // Forest Green
+                    color: "linear-gradient(90deg, #2ECC71, #27AE60)",
                     shiny: false,
                   };
+
+                // 2. Next Rank Calculation
+                const ranks = [
+                  { threshold: 25, title: "🎧 Switchboard Trainee" },
+                  { threshold: 75, title: "📠 Regional Operator" },
+                  { threshold: 150, title: "📡 Telecom Technician" },
+                  { threshold: 250, title: "🎛️ Exchange Manager" },
+                  { threshold: 350, title: "🗼 Routing Specialist" },
+                  { threshold: 450, title: "🛰️ Network Architect" },
+                  { threshold: 550, title: "👑 Area Code Legend" },
+                  { threshold: 645, title: "💎 The Ofcom Oracle" },
+                ];
+
+                const nextRank = ranks.find((r) => score < r.threshold);
+                const codesNeeded = nextRank ? nextRank.threshold - score : 0;
 
                 return (
                   <>
@@ -1004,21 +1313,33 @@ export default function App() {
                         />
                       ))}
                     </div>
+
+                    {/* 3. MINIMALIST STYLE */}
+                    <div
+                      style={{
+                        fontSize: "12px",
+                        color: "#888",
+                        marginTop: "8px",
+                        textAlign: "right",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {nextRank ? (
+                        <span>
+                          {codesNeeded} code{codesNeeded !== 1 ? "s" : ""} until{" "}
+                          <span style={{ color: "#555" }}>
+                            {nextRank.title}
+                          </span>
+                        </span>
+                      ) : (
+                        <span style={{ color: "#2ecc71" }}>
+                          Maximum rank achieved! 🏆
+                        </span>
+                      )}
+                    </div>
                   </>
                 );
               })()}
-              <div
-                style={{
-                  fontSize: "12px",
-                  color: "#888",
-                  marginTop: "8px",
-                  textAlign: "right",
-                  fontWeight: "bold",
-                }}
-              >
-                Mistakes:{" "}
-                <span style={{ color: "#e74c3c" }}>{mistakeCount}</span>
-              </div>
             </div>
 
             <div className="mode-toggle">
