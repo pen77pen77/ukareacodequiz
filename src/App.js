@@ -713,7 +713,7 @@ export default function App() {
             </div>
           </h2>
 
-          {/* 2. NEW DROPDOWN RULES BOX GOES HERE */}
+          {/* 2. DYNAMIC DROPDOWN RULES BOX */}
           {showInfo && (
             <div
               style={{
@@ -734,8 +734,11 @@ export default function App() {
                   fontSize: "15px",
                 }}
               >
-                📖 How to Play
+                {appSection === "GAME" && "🎮 Classic Mode Rules"}
+                {appSection === "QUIZ" && "⚡ Sprint Mode Rules"}
+                {appSection === "DICTIONARY" && "📖 Dictionary Tips"}
               </strong>
+
               <ul
                 style={{
                   paddingLeft: "0",
@@ -746,28 +749,98 @@ export default function App() {
                   gap: "10px",
                 }}
               >
-                <li>
-                  <strong>🎯 The Goal:</strong> Identify all 645 UK geographic
-                  area codes to become <strong>💎 The Ofcom Oracle</strong>.
-                </li>
-                <li>
-                  <strong>🔢 Flexible Numbers:</strong> Codes can be entered
-                  with or without the leading zero (e.g., <code>0116</code> or{" "}
-                  <code>116</code>).
-                </li>
-                <li>
-                  <strong>✏️ Typo Forgiveness:</strong> In 'Code ➡️ Place' mode,
-                  close spelling guesses are accepted — no need for perfection.
-                </li>
-                <li>
-                  <strong>🗺️ Interactive Map:</strong> Click any dot on the map
-                  at any time to jump directly to that location.
-                </li>
-                <li>
-                  <strong>🤔 Stuck?:</strong> Use <strong>Skip</strong> to move
-                  to a random location, or <strong>Give Up</strong> to reveal
-                  the answer.
-                </li>
+                {/* CLASSIC MODE RULES */}
+                {appSection === "GAME" && (
+                  <>
+                    <li>
+                      <strong>🎯 The Goal:</strong> Master all{" "}
+                      {areaCodes.length} UK area codes to become 💎 The Ofcom
+                      Oracle. Correct answers turn dots{" "}
+                      <span style={{ color: "#2ecc71", fontWeight: "bold" }}>
+                        green
+                      </span>
+                      ; mistakes turn them{" "}
+                      <span style={{ color: "#f39c12", fontWeight: "bold" }}>
+                        orange
+                      </span>
+                      .
+                    </li>
+                    <li>
+                      <strong>🔢 Flexible Input:</strong> Enter codes with or
+                      without the leading zero (e.g. <code>0116</code> or{" "}
+                      <code>116</code>). Close spellings are forgiven in 'Code
+                      ➡️ Place' mode.
+                    </li>
+                    <li>
+                      <strong>🗺️ Interactive Map:</strong> Click any dot to jump
+                      to that location. With Auto-Next off, you navigate the map
+                      manually at your own pace.
+                    </li>
+                    <li>
+                      <strong>⚠️ Skip vs Give Up:</strong> Skip moves to a
+                      random unmastered code for free. Give Up reveals the
+                      answer but counts as a mistake.
+                    </li>
+                  </>
+                )}
+
+                {/* SPRINT MODE RULES */}
+                {appSection === "QUIZ" && (
+                  <>
+                    <li>
+                      <strong>🎯 The Goal:</strong> 10 quick-fire questions
+                      drawn from your chosen region and status. No pressure —
+                      Sprint never affects your Classic map progress.
+                    </li>
+                    <li>
+                      <strong>🔢 Flexible Input:</strong> Enter codes with or
+                      without the leading zero. Close spellings are forgiven in
+                      'Code ➡️ Place' mode.
+                    </li>
+                    <li>
+                      <strong>⏭️ Skipping:</strong> Submit an empty answer (or
+                      press Enter on a blank box) to skip — it counts as
+                      incorrect.
+                    </li>
+                    <li>
+                      <strong>📋 Review:</strong> After all 10 questions, you'll
+                      see every answer with what you wrote, so you can study
+                      your mistakes.
+                    </li>
+                  </>
+                )}
+
+                {/* DICTIONARY RULES */}
+                {appSection === "DICTIONARY" && (
+                  <>
+                    <li>
+                      <strong>🔍 Search:</strong> Type any town name or area
+                      code to instantly filter the list.
+                    </li>
+                    <li>
+                      <strong>🗺️ Map Jump:</strong> Click any entry (or any dot
+                      on the map) to fly to that location and highlight it in
+                      the list.
+                    </li>
+                    <li>
+                      <strong>🏷️ Status Tags:</strong> Click the tag on any
+                      entry to cycle it: New → Learning → Done. Dots on the map
+                      reflect these as{" "}
+                      <span style={{ color: "#888", fontWeight: "bold" }}>
+                        grey
+                      </span>
+                      ,{" "}
+                      <span style={{ color: "#3498db", fontWeight: "bold" }}>
+                        blue
+                      </span>
+                      , and{" "}
+                      <span style={{ color: "#2ecc71", fontWeight: "bold" }}>
+                        green
+                      </span>
+                      .
+                    </li>
+                  </>
+                )}
               </ul>
             </div>
           )}
